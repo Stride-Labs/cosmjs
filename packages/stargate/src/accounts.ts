@@ -54,7 +54,8 @@ export function accountFromAny(input: Any): Account {
 
     case "/cosmos.auth.v1beta1.BaseAccount":
       return accountFromBaseAccount(BaseAccount.decode(value));
-    case "/cosmos.auth.v1beta1.ModuleAccount": {
+    case "/cosmos.auth.v1beta1.ModuleAccount":
+    case "/ethermint.types.v1.EthAccount": {
       const baseAccount = ModuleAccount.decode(value).baseAccount;
       assert(baseAccount);
       return accountFromBaseAccount(baseAccount);

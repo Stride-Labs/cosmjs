@@ -1,4 +1,4 @@
-import { encodeSecp256k1Pubkey, makeSignDoc as makeSignDocAmino, StdFee } from "@cosmjs/amino";
+import { encodeSecp256k1Pubkey, encodeEthSecp256k1Pubkey, isisEthSecp256k1Pubkey, makeSignDoc as makeSignDocAmino, StdFee } from "@cosmjs/amino";
 import { fromBase64 } from "@cosmjs/encoding";
 import { Int53, Uint53 } from "@cosmjs/math";
 import {
@@ -201,7 +201,12 @@ export class SigningStargateClient extends StargateClient {
     if (!accountFromSigner) {
       throw new Error("Failed to retrieve account from signer");
     }
-    const pubkey = encodeSecp256k1Pubkey(accountFromSigner.pubkey);
+    // https://github.com/skip-mev/skip-router-sdk/pull/94/files
+    const account = await this.getAccount(signerAddress)
+    // https://github.com/skip-mev/skip-router-sdk/pull/94/files
+    const pubkey = account?.pubkey && isisEthSecp256k1Pubkey(account.pubkey)
+      ? encodeEthSecp256k1Pubkey(accountFromSigner.pubkey)
+      : encodeSecp256k1Pubkey(accountFromSigner.pubkey)
     const { sequence } = await this.getSequence(signerAddress);
     const { gasInfo } = await this.forceGetQueryClient().tx.simulate(anyMsgs, memo, pubkey, sequence);
     assertDefined(gasInfo);
@@ -405,7 +410,14 @@ export class SigningStargateClient extends StargateClient {
     if (!accountFromSigner) {
       throw new Error("Failed to retrieve account from signer");
     }
-    const pubkey = encodePubkey(encodeSecp256k1Pubkey(accountFromSigner.pubkey));
+    // https://github.com/skip-mev/skip-router-sdk/pull/94/files
+    const account = await this.getAccount(signerAddress)
+    // https://github.com/skip-mev/skip-router-sdk/pull/94/files
+    const pubkey = encodePubkey(
+      account?.pubkey && isisEthSecp256k1Pubkey(account.pubkey)
+        ? encodeEthSecp256k1Pubkey(accountFromSigner.pubkey)
+        : encodeSecp256k1Pubkey(accountFromSigner.pubkey)
+    );
     const signMode = SignMode.SIGN_MODE_LEGACY_AMINO_JSON;
     const msgs = messages.map((msg) => this.aminoTypes.toAmino(msg));
     const signDoc = makeSignDocAmino(msgs, fee, chainId, memo, accountNumber, sequence);

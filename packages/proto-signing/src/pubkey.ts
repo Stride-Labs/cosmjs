@@ -2,9 +2,11 @@
 import {
   encodeEd25519Pubkey,
   encodeSecp256k1Pubkey,
+  encodeEthSecp256k1Pubkey,
   isEd25519Pubkey,
   isMultisigThresholdPubkey,
   isSecp256k1Pubkey,
+  isEthSecp256k1Pubkey,
   MultisigThresholdPubkey,
   Pubkey,
   SinglePubkey,
@@ -15,6 +17,23 @@ import { PubKey as CosmosCryptoEd25519Pubkey } from "cosmjs-types/cosmos/crypto/
 import { LegacyAminoPubKey } from "cosmjs-types/cosmos/crypto/multisig/keys";
 import { PubKey as CosmosCryptoSecp256k1Pubkey } from "cosmjs-types/cosmos/crypto/secp256k1/keys";
 import { Any } from "cosmjs-types/google/protobuf/any";
+import { AccountData } from './signer'
+
+// https://github.com/skip-mev/skip-router-sdk/pull/94/files
+export function makePubkeyAnyFromAccount(account: AccountData) {
+  const algo = `${account.algo}`;
+
+  // Some impl use `eth_secp256k1` and some use `ethsecp256k1`, so we check for both
+  const isEthSecp256k1 = algo === "eth_secp256k1" || algo === "ethsecp256k1";
+
+  const pubkey = isEthSecp256k1
+    ? encodeEthSecp256k1Pubkey(account.pubkey)
+    : encodeSecp256k1Pubkey(account.pubkey);
+
+  const pubkeyAny = encodePubkey(pubkey);
+
+  return pubkeyAny;
+}
 
 /**
  * Takes a pubkey in the Amino JSON object style (type/value wrapper)
@@ -39,6 +58,15 @@ export function encodePubkey(pubkey: Pubkey): Any {
       typeUrl: "/cosmos.crypto.ed25519.PubKey",
       value: Uint8Array.from(CosmosCryptoEd25519Pubkey.encode(pubkeyProto).finish()),
     });
+  } else if (isEthSecp256k1Pubkey(pubkey)) {
+    // https://github.com/skip-mev/skip-router-sdk/pull/94/files
+    const pubkeyProto = CosmosCryptoSecp256k1Pubkey.fromPartial({
+      key: fromBase64(pubkey.value),
+    });
+    return Any.fromPartial({
+      typeUrl: "/ethermint.crypto.v1.ethsecp256k1.PubKey",
+      value: Uint8Array.from(CosmosCryptoSecp256k1Pubkey.encode(pubkeyProto).finish()),
+    });
   } else if (isMultisigThresholdPubkey(pubkey)) {
     const pubkeyProto = LegacyAminoPubKey.fromPartial({
       threshold: Uint53.fromString(pubkey.value.threshold).toNumber(),
@@ -61,6 +89,11 @@ export function encodePubkey(pubkey: Pubkey): Any {
  */
 export function anyToSinglePubkey(pubkey: Any): SinglePubkey {
   switch (pubkey.typeUrl) {
+    // https://github.com/skip-mev/skip-router-sdk/pull/94/files
+    case "/ethermint.crypto.v1.ethsecp256k1.PubKey": {
+      const { key } = CosmosCryptoSecp256k1Pubkey.decode(pubkey.value);
+      return encodeEthSecp256k1Pubkey(key);
+    }
     case "/cosmos.crypto.secp256k1.PubKey": {
       const { key } = CosmosCryptoSecp256k1Pubkey.decode(pubkey.value);
       return encodeSecp256k1Pubkey(key);
@@ -80,9 +113,20 @@ export function anyToSinglePubkey(pubkey: Any): SinglePubkey {
  * as well as multisig threshold pubkeys.
  */
 export function decodePubkey(pubkey: Any): Pubkey {
+  if (!pubkey || !pubkey.value) {
+    return null;
+  }
+
   switch (pubkey.typeUrl) {
     case "/cosmos.crypto.secp256k1.PubKey":
     case "/cosmos.crypto.ed25519.PubKey": {
+      return anyToSinglePubkey(pubkey);
+    }
+      // https://github.com/skip-mev/skip-router-sdk/pull/94/files
+    case "/ethermint.crypto.v1.ethsecp256k1.PubKey": {
+      return anyToSinglePubkey(pubkey);
+    }
+    case "/cosmos.crypto.secp256k1.PubKey": {
       return anyToSinglePubkey(pubkey);
     }
     case "/cosmos.crypto.multisig.LegacyAminoPubKey": {

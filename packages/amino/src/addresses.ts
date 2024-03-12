@@ -2,9 +2,9 @@
 
 import { ripemd160, sha256 } from "@cosmjs/crypto";
 import { fromBase64, toBech32 } from "@cosmjs/encoding";
-
+import { keccak256 } from "@cosmjs/crypto";
 import { encodeAminoPubkey } from "./encoding";
-import { isEd25519Pubkey, isMultisigThresholdPubkey, isSecp256k1Pubkey, Pubkey } from "./pubkeys";
+import { isEd25519Pubkey, isMultisigThresholdPubkey, isSecp256k1Pubkey, isEthSecp256k1Pubkey, Pubkey } from "./pubkeys";
 
 export function rawEd25519PubkeyToRawAddress(pubkeyData: Uint8Array): Uint8Array {
   if (pubkeyData.length !== 32) {
@@ -20,6 +20,17 @@ export function rawSecp256k1PubkeyToRawAddress(pubkeyData: Uint8Array): Uint8Arr
   return ripemd160(sha256(pubkeyData));
 }
 
+export function rawEthSecp256k1PubkeyToRawAddress(
+  pubkeyData: Uint8Array,
+): Uint8Array {
+  if (pubkeyData.length !== 65) {
+    throw new Error(
+      `Invalid ETHSecp256k1 pubkey length (compressed): ${pubkeyData.length}`,
+    );
+  }
+  return keccak256(pubkeyData.slice(1)).slice(-20);
+}
+
 // For secp256k1 this assumes we already have a compressed pubkey.
 export function pubkeyToRawAddress(pubkey: Pubkey): Uint8Array {
   if (isSecp256k1Pubkey(pubkey)) {
@@ -32,6 +43,10 @@ export function pubkeyToRawAddress(pubkey: Pubkey): Uint8Array {
     // https://github.com/tendermint/tendermint/blob/38b401657e4ad7a7eeb3c30a3cbf512037df3740/crypto/multisig/threshold_pubkey.go#L71-L74
     const pubkeyData = encodeAminoPubkey(pubkey);
     return sha256(pubkeyData).slice(0, 20);
+  } else if (isEthSecp256k1Pubkey(pubkey)) {
+    https://github.com/skip-mev/skip-router-sdk/pull/94/files
+    const pubkeyData = fromBase64(pubkey.value);
+    return rawEthSecp256k1PubkeyToRawAddress(pubkeyData);
   } else {
     throw new Error("Unsupported public key type");
   }
